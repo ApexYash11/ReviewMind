@@ -1,0 +1,1 @@
+"""ReviewMind application package."""

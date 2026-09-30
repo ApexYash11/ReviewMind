@@ -6,6 +6,14 @@ and displays.
 """
 
 import io
+import sys
+from pathlib import Path
+
+# `streamlit run app/main.py` puts the app/ directory on sys.path, not the
+# project root, so `app.*` imports would fail without this.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
 
@@ -158,7 +166,10 @@ def run_analysis() -> None:
         return
     try:
         analyzer = ReviewAnalyzer(config, demo_mode=DEMO_MODE)
-        with st.spinner("Processing reviews (NLP + LLM)... This usually takes 10-30 seconds."):
+        with st.spinner(
+            "Processing reviews (NLP + LLM)... this can take 10-60s "
+            "depending on the model. Please keep this tab open."
+        ):
             result, stats, keywords = analyzer.analyze_reviews(raw)
         st.session_state.analysis = result
         st.session_state.stats = stats
@@ -332,7 +343,7 @@ if st.session_state.get("raw_reviews"):
         else:
             try:
                 analyzer = ReviewAnalyzer(config, demo_mode=DEMO_MODE)
-                with st.spinner("Thinking..."):
+                with st.spinner("Thinking... (this usually takes 5-30 seconds)"):
                     answer = analyzer.answer_question(st.session_state.raw_reviews, question)
                 st.markdown("**Answer:**")
                 st.info(answer)
