@@ -1,0 +1,14 @@
+llm:
+  provider: openrouter          # openai | openrouter | groq | custom
+  model: ""                     # e.g. openai/gpt-4o-mini or meta-llama/llama-3.1-8b-instruct
+  base_url: ""                  # e.g. https://openrouter.ai/api/v1 (leave empty = use LLM_BASE_URL env)
+  timeout: 60                   # seconds
+  max_retries: 2
+  temperature: 0.2
+  max_tokens: 6000              # reasoning models need headroom above their thinking budget
+  max_reasoning_tokens: 0       # >0 caps reasoning (OpenRouter reasoning models)
+
+app:
+  title: ReviewMind
+  max_input_chars: 20000        # reject excessively large inputs
+  top_keywords: 10

@@ -1,0 +1,6 @@
+pandas
+PyYAML
+python-dotenv
+requests
+streamlit
+nltk

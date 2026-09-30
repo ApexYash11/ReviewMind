@@ -1,0 +1,344 @@
+"""Streamlit frontend for ReviewMind.
+
+Renders the review input, the analytics dashboard and the QA section.
+All heavy lifting lives in the app/ modules; this file only orchestrates
+and displays.
+"""
+
+import io
+
+import streamlit as st
+
+from app.llm_client import LLMConfigError, LLMError, load_config
+from app.review_analyzer import ReviewAnalyzer
+from app.models import ValidationError
+
+st.set_page_config(page_title="ReviewMind", page_icon=":material/sentiment_satisfied:", layout="wide")
+
+config = load_config()
+
+
+def _api_key_configured() -> bool:
+    """True when a real LLM API key is available in the environment."""
+    import os
+
+    return bool(os.getenv("LLM_API_KEY", "").strip())
+
+
+DEMO_MODE = not _api_key_configured()
+
+# ----------------------------------------------------------------------
+# Session state
+# ----------------------------------------------------------------------
+if "analysis" not in st.session_state:
+    st.session_state.analysis = None
+if "reviews_text" not in st.session_state:
+    st.session_state.reviews_text = ""
+if "stats" not in st.session_state:
+    st.session_state.stats = []
+if "keywords" not in st.session_state:
+    st.session_state.keywords = []
+
+
+# ----------------------------------------------------------------------
+# Helpers
+# ----------------------------------------------------------------------
+def read_uploaded_file(uploaded) -> str | None:
+    """Read .txt or .csv uploads and return their text content."""
+    name = uploaded.name.lower()
+    if name.endswith(".txt"):
+        return uploaded.read().decode("utf-8", errors="replace")
+    if name.endswith(".csv"):
+        import csv
+
+        raw = uploaded.read().decode("utf-8", errors="replace")
+        try:
+            rows = list(csv.reader(io.StringIO(raw)))
+        except csv.Error:
+            st.error("Could not parse the CSV file. Please check its format.")
+            return None
+        if not rows:
+            st.error("The CSV file is empty.")
+            return None
+        header = [h.strip().lower() for h in rows[0]]
+        col = None
+        for candidate in ("review", "reviews", "text", "comment", "body"):
+            if candidate in header:
+                col = header.index(candidate)
+                break
+        if col is None:
+            joined = "\n\n".join(" ".join(filter(None, row)) for row in rows[1:])
+        else:
+            joined = "\n\n".join(row[col] for row in rows[1:] if len(row) > col and row[col].strip())
+        return joined
+    st.error("Unsupported file type. Please upload a .txt or .csv file.")
+    return None
+
+
+SENTIMENT_COLORS = {
+    "positive": "#2ecc71",
+    "neutral": "#95a5a6",
+    "negative": "#e74c3c",
+    "mixed": "#f39c12",
+}
+
+
+def aspect_chart(analysis) -> None:
+    """Horizontal bar chart of aspect counts per sentiment."""
+    import altair as alt
+    import pandas as pd
+
+    rows = [
+        {"Aspect": a.aspect, "Sentiment": a.sentiment, "Count": 1}
+        for a in analysis.aspects
+    ]
+    if not rows:
+        st.info("No aspects to chart.")
+        return
+    df = pd.DataFrame(rows)
+    grouped = df.groupby(["Aspect", "Sentiment"], as_index=False).sum()
+
+    order = list(pd.unique(df["Aspect"]))
+    chart = (
+        alt.Chart(grouped)
+        .mark_bar()
+        .encode(
+            x=alt.X("Count:Q", title="Mentions"),
+            y=alt.Y("Aspect:N", sort=order, title=None),
+            color=alt.Color(
+                "Sentiment:N",
+                scale=alt.Scale(
+                    domain=list(SENTIMENT_COLORS), range=list(SENTIMENT_COLORS)
+                ),
+                legend=None,
+            ),
+            tooltip=["Aspect", "Sentiment", "Count"],
+        )
+        .properties(height=280)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
+def donut_chart(analysis) -> None:
+    """Donut chart of the aspect sentiment breakdown."""
+    import altair as alt
+    import pandas as pd
+
+    sentiments = [a.sentiment for a in analysis.aspects] or [analysis.overall_sentiment]
+    counts = pd.Series(sentiments).value_counts().reset_index()
+    counts.columns = ["Sentiment", "Count"]
+    chart = (
+        alt.Chart(counts)
+        .mark_arc(innerRadius=50)
+        .encode(
+            theta="Count:Q",
+            color=alt.Color(
+                "Sentiment:N",
+                scale=alt.Scale(
+                    domain=list(SENTIMENT_COLORS), range=list(SENTIMENT_COLORS)
+                ),
+                legend=alt.Legend(title=None, orient="bottom"),
+            ),
+            tooltip=["Sentiment", "Count"],
+        )
+        .properties(height=280)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
+def run_analysis() -> None:
+    """Execute the full pipeline and store results in session state."""
+    raw = st.session_state.reviews_text.strip()
+    if not raw:
+        st.error("Please paste or upload at least one review before analyzing.")
+        return
+    max_chars = config.get("app", {}).get("max_input_chars", 20000)
+    if len(raw) > max_chars:
+        st.error(f"Input too large ({len(raw)} characters). Limit is {max_chars}.")
+        return
+    try:
+        analyzer = ReviewAnalyzer(config, demo_mode=DEMO_MODE)
+        with st.spinner("Processing reviews (NLP + LLM)... This usually takes 10-30 seconds."):
+            result, stats, keywords = analyzer.analyze_reviews(raw)
+        st.session_state.analysis = result
+        st.session_state.stats = stats
+        st.session_state.keywords = keywords
+        st.session_state.raw_reviews = raw
+    except ValidationError as exc:
+        st.error(str(exc))
+    except LLMError as exc:
+        st.error(f"LLM error: {exc}")
+    except Exception as exc:  # keep stack traces away from the user
+        st.error(f"Something went wrong: {exc}")
+
+
+# ----------------------------------------------------------------------
+# Header
+# ----------------------------------------------------------------------
+st.title("REVIEWMIND")
+st.subheader("AI Product Review Analyzer")
+st.caption("Analyze customer opinions using NLP + LLM")
+
+if DEMO_MODE:
+    st.info(
+        "🧪 **Demo mode** — no `LLM_API_KEY` found, so analysis is simulated "
+        "locally. Add your key to `.env` (see `.env.example`) for real LLM output."
+    )
+
+st.divider()
+
+# ----------------------------------------------------------------------
+# Review input
+# ----------------------------------------------------------------------
+st.subheader("Review Input")
+
+upload = st.file_uploader("Upload .txt / .csv", type=["txt", "csv"])
+if upload is not None:
+    content = read_uploaded_file(upload)
+    if content:
+        st.session_state.reviews_text = content
+        st.info(f"Loaded {upload.name} ({len(content)} characters).")
+
+default_text = (
+    "Review 1: I love the camera on this phone, photos are sharp and detailed.\n"
+    "Review 2: Battery life is disappointing, I have to charge it twice a day.\n"
+    "Review 3: The display is excellent, very bright and colorful."
+)
+st.session_state.reviews_text = st.text_area(
+    "Paste customer reviews here (one or more, optionally prefixed with 'Review N:')",
+    value=st.session_state.reviews_text or default_text,
+    height=180,
+)
+
+col_btn, col_clear = st.columns([1, 3])
+with col_btn:
+    analyze_clicked = st.button("Analyze Reviews", type="primary")
+with col_clear:
+    if st.button("Clear"):
+        st.session_state.reviews_text = ""
+        st.session_state.analysis = None
+        st.rerun()
+
+if analyze_clicked:
+    run_analysis()
+
+# ----------------------------------------------------------------------
+# Dashboard
+# ----------------------------------------------------------------------
+analysis = st.session_state.analysis
+if analysis is not None:
+    st.divider()
+    st.subheader("Review Analytics")
+
+    # Overall sentiment metrics
+    st.markdown("**Overall Sentiment**")
+    sentiment = analysis.overall_sentiment
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Detected", sentiment.capitalize())
+    # Sentiment distribution across aspects for a quick visual.
+    aspect_sentiments = [a.sentiment for a in analysis.aspects] or [sentiment]
+    total = len(aspect_sentiments)
+    metric_cols[1].metric(
+        "Positive aspects", f"{100 * aspect_sentiments.count('positive') / total:.0f}%"
+    )
+    metric_cols[2].metric(
+        "Neutral aspects", f"{100 * aspect_sentiments.count('neutral') / total:.0f}%"
+    )
+    metric_cols[3].metric(
+        "Negative aspects", f"{100 * aspect_sentiments.count('negative') / total:.0f}%"
+    )
+
+    st.divider()
+
+    # Sentiment distribution chart
+    st.markdown("**Sentiment Distribution**")
+    chart_cols = st.columns([2, 1])
+    with chart_cols[0]:
+        aspect_chart(analysis)
+    with chart_cols[1]:
+        donut_chart(analysis)
+
+    st.divider()
+
+    # Aspect analysis table
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Aspect Analysis**")
+        if analysis.aspects:
+            import pandas as pd
+
+            df = pd.DataFrame(
+                [{"Aspect": a.aspect, "Sentiment": a.sentiment.capitalize()} for a in analysis.aspects]
+            )
+            st.table(df)
+        else:
+            st.info("No product aspects were detected in these reviews.")
+
+    with right:
+        st.markdown("**Positive Points**")
+        for point in analysis.positive_points:
+            st.markdown(f"- {point}")
+        st.markdown("**Negative Points**")
+        for point in analysis.negative_points:
+            st.markdown(f"- {point}")
+
+    st.divider()
+
+    # Complaints, summary and NLP statistics
+    st.markdown("**Common Complaints**")
+    if analysis.common_complaints:
+        st.error(", ".join(analysis.common_complaints))
+    else:
+        st.info("No recurring complaints found.")
+
+    st.markdown("**AI Summary**")
+    st.success(analysis.summary or "No summary available.")
+
+    if st.session_state.stats:
+        with st.expander("Traditional NLP statistics (preprocessing)", expanded=False):
+            import pandas as pd
+
+            stats_df = pd.DataFrame(
+                [
+                    {
+                        "Review": s.index,
+                        "Sentences": s.sentence_count,
+                        "Tokens": s.token_count,
+                        "Characters": s.char_count,
+                        "Avg sentence length": s.avg_sentence_length,
+                    }
+                    for s in st.session_state.stats
+                ]
+            )
+            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+            if st.session_state.keywords:
+                kw = ", ".join(f"{word} ({count})" for word, count in st.session_state.keywords)
+                st.caption(f"Top keywords after normalization: {kw}")
+
+# ----------------------------------------------------------------------
+# Ask the reviews
+# ----------------------------------------------------------------------
+if st.session_state.get("raw_reviews"):
+    st.divider()
+    st.subheader("Ask the Reviews")
+    question = st.text_input(
+        "Question",
+        value="What is the biggest problem reported by customers?",
+        key="qa_question",
+    )
+    if st.button("Ask"):
+        if not question.strip():
+            st.error("Please type a question first.")
+        else:
+            try:
+                analyzer = ReviewAnalyzer(config, demo_mode=DEMO_MODE)
+                with st.spinner("Thinking..."):
+                    answer = analyzer.answer_question(st.session_state.raw_reviews, question)
+                st.markdown("**Answer:**")
+                st.info(answer)
+            except ValidationError as exc:
+                st.error(str(exc))
+            except LLMError as exc:
+                st.error(f"LLM error: {exc}")
+            except Exception as exc:
+                st.error(f"Something went wrong: {exc}")
