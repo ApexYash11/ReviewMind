@@ -59,11 +59,44 @@ if "keywords" not in st.session_state:
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+SUPPORTED_EXTENSIONS = (".txt", ".csv", ".pdf", ".docx", ".xlsx")
+
+REVIEW_COLUMNS = ("review", "reviews", "text", "comment", "body")
+
+
+def _pick_review_column(header: list[str]) -> int | None:
+    """Index of the review-like column, or None when there isn't one."""
+    lowered = [h.strip().lower() for h in header]
+    for candidate in REVIEW_COLUMNS:
+        if candidate in lowered:
+            return lowered.index(candidate)
+    return None
+
+
+def _join_table_rows(header: list[str], rows: list[list[str]]) -> str | None:
+    """Turn table rows into review text, preferring a review-like column."""
+    col = _pick_review_column(header)
+    if col is None:
+        joined = "\n\n".join(" ".join(filter(None, row)) for row in rows)
+    else:
+        joined = "\n\n".join(
+            row[col] for row in rows if len(row) > col and row[col].strip()
+        )
+    if not joined.strip():
+        st.error("No review text found in the uploaded file.")
+        return None
+    return joined
+
+
 def read_uploaded_file(uploaded) -> str | None:
-    """Read .txt or .csv uploads and return their text content."""
+    """Read an uploaded review file and return its text content."""
     name = uploaded.name.lower()
     if name.endswith(".txt"):
-        return uploaded.read().decode("utf-8", errors="replace")
+        text = uploaded.read().decode("utf-8", errors="replace")
+        if not text.strip():
+            st.error("The text file is empty.")
+            return None
+        return text
     if name.endswith(".csv"):
         import csv
 
@@ -76,18 +109,53 @@ def read_uploaded_file(uploaded) -> str | None:
         if not rows:
             st.error("The CSV file is empty.")
             return None
-        header = [h.strip().lower() for h in rows[0]]
-        col = None
-        for candidate in ("review", "reviews", "text", "comment", "body"):
-            if candidate in header:
-                col = header.index(candidate)
-                break
-        if col is None:
-            joined = "\n\n".join(" ".join(filter(None, row)) for row in rows[1:])
-        else:
-            joined = "\n\n".join(row[col] for row in rows[1:] if len(row) > col and row[col].strip())
-        return joined
-    st.error("Unsupported file type. Please upload a .txt or .csv file.")
+        return _join_table_rows(rows[0], rows[1:])
+    if name.endswith(".pdf"):
+        from pypdf import PdfReader
+
+        try:
+            reader = PdfReader(io.BytesIO(uploaded.read()))
+            text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
+        except Exception:
+            st.error("Could not read the PDF file. Is it a valid PDF?")
+            return None
+        if not text.strip():
+            st.error("No readable text found in the PDF file.")
+            return None
+        return text
+    if name.endswith(".docx"):
+        from docx import Document
+
+        try:
+            document = Document(io.BytesIO(uploaded.read()))
+            text = "\n\n".join(p.text for p in document.paragraphs if p.text.strip())
+        except Exception:
+            st.error("Could not read the Word file. Is it a valid .docx?")
+            return None
+        if not text.strip():
+            st.error("No readable text found in the Word file.")
+            return None
+        return text
+    if name.endswith(".xlsx"):
+        from openpyxl import load_workbook
+
+        try:
+            workbook = load_workbook(io.BytesIO(uploaded.read()), read_only=True)
+            sheet = workbook.active
+            table = [
+                ["" if cell is None else str(cell) for cell in row]
+                for row in sheet.iter_rows(values_only=True)
+            ]
+        except Exception:
+            st.error("Could not read the Excel file. Is it a valid .xlsx?")
+            return None
+        if not table:
+            st.error("The Excel file is empty.")
+            return None
+        return _join_table_rows(table[0], table[1:])
+    st.error(
+        "Unsupported file type. Please upload a .txt, .csv, .pdf, .docx or .xlsx file."
+    )
     return None
 
 
@@ -211,7 +279,10 @@ st.divider()
 # ----------------------------------------------------------------------
 st.subheader("Review Input")
 
-upload = st.file_uploader("Upload .txt / .csv", type=["txt", "csv"])
+upload = st.file_uploader(
+    "Upload .txt / .csv / .pdf / .docx / .xlsx",
+    type=["txt", "csv", "pdf", "docx", "xlsx"],
+)
 if upload is not None:
     content = read_uploaded_file(upload)
     if content:

@@ -1,6 +1,9 @@
+nltk
+openpyxl
 pandas
-PyYAML
+pypdf
+python-docx
 python-dotenv
+PyYAML
 requests
 streamlit
-nltk

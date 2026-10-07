@@ -46,7 +46,8 @@ Every row has an exact expected result — anything else is a bug.
 | 4 | Upload `data/sample_reviews/sample_reviews.txt` | "Loaded … (3516 characters)" info; text area fills |
 | 5 | Upload a `.csv` with a `review` column | Only that column's rows are used |
 | 6 | Upload a `.csv` without a review-like column | All fields joined, no crash |
-| 7 | Upload an empty `.csv` or a `.json` file | Clean error, no crash, previous state kept |
+| 7 | Upload an empty `.csv`, an empty `.txt`, or a `.json` file | Clean error, no crash, previous state kept |
+| 7b | Upload a `.pdf`, `.docx`, and `.xlsx` with review text | Text extracted; spreadsheet prefers a `review` column like CSV |
 | 8 | Click **Analyze Reviews** on the sample file | Spinner 10–60 s, then: 5 metric columns, 2 charts, aspect table, points, complaints in yellow, AI summary, NLP stats expander with 61 rows |
 | 9 | Check the four aspect percentages | They sum to exactly 100% |
 | 10 | Click **Clear** | Text box empties, dashboard and Q&A section disappear |
@@ -58,7 +59,7 @@ Every row has an exact expected result — anything else is a bug.
 
 ## 4. What "done" looks like
 
-- `pytest`: 21 passed.
+- `pytest`: 37 passed.
 - `python -m tests.e2e_live`: 18/18 passed.
 - All 15 manual rows behave as written, in both live and demo mode.
 - `git status` is clean and every fix is a separate commit.

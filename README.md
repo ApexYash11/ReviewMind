@@ -4,9 +4,9 @@
 
 AI product review analyzer: traditional NLP preprocessing plus an LLM API, turning unstructured customer feedback into a structured dashboard.
 
-Paste reviews (or upload a `.txt`/`.csv`), and ReviewMind returns overall sentiment, aspect-based sentiment (Camera, Battery, Display, …), positive/negative points, common complaints, an AI summary — and answers follow-up questions strictly from the reviews.
+Paste reviews (or upload a `.txt`, `.csv`, `.pdf`, `.docx` or `.xlsx` file), and ReviewMind returns overall sentiment, aspect-based sentiment (Camera, Battery, Display, …), positive/negative points, common complaints, an AI summary — and answers follow-up questions strictly from the reviews.
 
-> **Status: working.** The NLP pipeline, prompt builders, LLM client with retries, response validation, mock demo client, Streamlit dashboard, and Q&A path are all implemented and tested (**21 unit tests passing**, plus a live end-to-end script with **18 checks** against a real model). No API key is required to try it: without one the app runs in **demo mode** with a local rule-based client that returns the same structured schema.
+> **Status: working.** The NLP pipeline, prompt builders, LLM client with retries, response validation, mock demo client, Streamlit dashboard, and Q&A path are all implemented and tested (**37 unit tests passing**, plus a live end-to-end script with **18 checks** against a real model). No API key is required to try it: without one the app runs in **demo mode** with a local rule-based client that returns the same structured schema.
 
 ## Why this exists
 
@@ -87,7 +87,7 @@ Set these via `.env` or `config/config.yaml`.
 ## Demo flow
 
 1. Open the Streamlit app.
-2. Paste 5–10 sample reviews (or upload a `.txt`/`.csv`, or use `data/sample_reviews/sample_reviews.txt`).
+2. Paste 5–10 sample reviews (or upload a `.txt`, `.csv`, `.pdf`, `.docx` or `.xlsx` file — or use `data/sample_reviews/sample_reviews.txt`).
 3. Click **Analyze Reviews**.
 4. Review the dashboard: sentiment metrics, aspect charts and table, positive/negative points, complaints, AI summary, and NLP statistics.
 5. Ask a question, e.g. *"What is the biggest problem reported by customers?"*
@@ -96,7 +96,7 @@ Set these via `.env` or `config/config.yaml`.
 ## Tests
 
 ```bash
-pytest -v        # 21 tests, no API key or network access required
+pytest -v        # 37 tests, no API key or network access required
 ```
 
 ### End-to-end test against a live LLM
@@ -119,7 +119,7 @@ It asserts the NLP stage, the LLM analysis, response validation, keyword extract
 
 ## Error handling
 
-The app shows friendly Streamlit messages (never stack traces) for: empty input, unsupported files, oversized input, missing/invalid API key, timeouts, rate limits, network errors, invalid JSON and missing response fields.
+The app shows friendly Streamlit messages (never stack traces) for: empty input, empty files, unsupported files, oversized input, missing/invalid API key, timeouts, rate limits, network errors, invalid JSON and missing response fields.
 
 ## Repository layout
 
@@ -140,6 +140,7 @@ reviewmind/
 │   ├── test_nlp.py        # Preprocessor unit tests
 │   ├── test_analyzer.py   # Validation + orchestration tests
 │   ├── test_mock_llm.py   # Demo-mode client tests
+│   ├── test_uploads.py    # File-upload parsing tests (txt/csv/pdf/docx/xlsx)
 │   └── e2e_live.py        # Live-model end-to-end checks (not run by pytest)
 ├── data/sample_reviews/   # 61-review sample corpus
 ├── .env.example
