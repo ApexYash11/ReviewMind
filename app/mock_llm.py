@@ -17,13 +17,18 @@ POSITIVE_WORDS = {
     "love", "loved", "great", "excellent", "amazing", "good", "sharp",
     "bright", "colorful", "premium", "solid", "impressive",
     "surprisingly", "natural", "detailed", "recommend", "beautiful",
-    "smooth", "worth", "easy", "clear", "loud",
+    "smooth", "worth", "easy", "clear", "loud", "reliable", "perfect",
+    "perfectly", "snappy", "fluid", "crisp", "satisfied", "helpful",
+    "comfortable", "accurate", "promptly", "like", "liked",
 }
 NEGATIVE_WORDS = {
     "disappointing", "poor", "bad", "worst", "slow", "drain",
     "heat", "hot", "overheat", "annoying", "fails", "fail", "broken",
-    "weak", "expensive", "overpriced", "lag", "crash", "crashes",
-    "problem", "issue", "terrible", "horrible", "waste",
+    "weak", "expensive", "overpriced", "lag", "laggy", "crash", "crashes",
+    "problem", "issue", "terrible", "horrible", "waste", "awful",
+    "hate", "hated", "mediocre", "unreliable", "defective", "flimsy",
+    "slippery", "blurry", "grainy", "flicker", "scratch", "creak",
+    "wobble", "bloatware", "delayed", "frustrating", "worry",
 }
 
 # Common product aspects to look for in the text.
@@ -79,10 +84,37 @@ class MockLLMClient(LLMClient):
             "summary": summary,
         }
 
+    # Lines that belong to the prompt instructions rather than the reviews.
+    _INSTRUCTION_PREFIXES = (
+        "you are a",
+        "analyze the",
+        "answer the",
+        "if the reviews",
+        "return a short",
+        "return only valid json",
+        "identify:",
+        "reviews:",
+    )
+
     def _extract_reviews(self, prompt: str) -> list[str]:
         """Pull the 'Review N: ...' lines out of the analysis prompt."""
         found = re.findall(r"Review \d+: (.+)", prompt)
-        return [text.strip() for text in found if text.strip()] or [prompt.strip()]
+        if found:
+            return [text.strip() for text in found if text.strip()]
+        # Fallback for unnumbered input: treat each non-instruction line as
+        # a review instead of collapsing the whole prompt (instructions
+        # included) into a single review, which would poison the scores.
+        lines = []
+        for line in prompt.splitlines():
+            stripped = line.strip().lstrip("0123456789. )")
+            if not stripped:
+                continue
+            if stripped.lower().startswith(self._INSTRUCTION_PREFIXES):
+                continue
+            if stripped.startswith("{") or stripped.startswith('"'):
+                continue
+            lines.append(stripped)
+        return lines or ([prompt.strip()] if prompt.strip() else [])
 
     @staticmethod
     def _word_variants(word: str) -> list[str]:
@@ -109,17 +141,30 @@ class MockLLMClient(LLMClient):
                 score -= 1
         return score
 
+    @staticmethod
+    def _split_sentences(text: str) -> list[str]:
+        """Lightweight sentence splitter (no NLTK dependency in the mock)."""
+        parts = re.split(r"(?<=[.!?])\s+", text.strip())
+        return [p.strip() for p in parts if p.strip()]
+
     def _score_aspects(self, reviews: list[str]) -> dict[str, float]:
-        """Net sentiment score per aspect (positive > 0, negative < 0)."""
+        """Net sentiment score per aspect (positive > 0, negative < 0).
+
+        Scoring is per sentence: a sentence contributes its score only to
+        the aspects it actually mentions. Attributing a whole review's
+        score to every mentioned aspect lets praise for one aspect cancel
+        out complaints about another.
+        """
         scores: dict[str, float] = {}
         mentions: dict[str, int] = {}
         for review in reviews:
-            lowered = review.lower()
-            score = self._score_text(review)
-            for aspect, keywords in ASPECT_KEYWORDS.items():
-                if any(k in lowered for k in keywords):
-                    scores[aspect] = scores.get(aspect, 0) + score
-                    mentions[aspect] = mentions.get(aspect, 0) + 1
+            for sentence in self._split_sentences(review):
+                lowered = sentence.lower()
+                score = self._score_text(sentence)
+                for aspect, keywords in ASPECT_KEYWORDS.items():
+                    if any(k in lowered for k in keywords):
+                        scores[aspect] = scores.get(aspect, 0) + score
+                        mentions[aspect] = mentions.get(aspect, 0) + 1
         # Normalize by mention count so one strongly-worded review
         # does not dominate; keep sign.
         return {
@@ -190,11 +235,17 @@ class MockLLMClient(LLMClient):
     # QA simulation
     # ------------------------------------------------------------------
     def _answer_question(self, prompt: str) -> str:
-        question = prompt.split("Question:")[-1].strip().rstrip()
-        reviews = self._extract_reviews(prompt.split("Question:")[0])
+        # Split on the template's own "Question:" marker at a line start so
+        # a review that happens to mention "question:" does not break parsing.
+        if "\nQuestion:" in prompt:
+            body, _, question = prompt.rpartition("\nQuestion:")
+        else:
+            body, _, question = prompt.rpartition("Question:")
+        question = question.strip()
+        reviews = self._extract_reviews(body)
         lowered = question.lower()
 
-        if not reviews or not any(self._score_text(r) != 0 or r for r in reviews):
+        if not reviews or not question:
             return "The answer cannot be determined from the provided reviews."
 
         aspect_scores = self._score_aspects(reviews)
@@ -203,9 +254,13 @@ class MockLLMClient(LLMClient):
         if any(w in lowered for w in ("complain", "problem", "issue", "worst", "biggest")):
             if not complaints and not negative:
                 return "No clear complaints appear in the provided reviews."
-            focus = complaints[0] if complaints else "overall quality"
-            detail = negative[0] if negative else f"Issues with {focus.lower()}"
-            return f"The most common complaint is {focus.lower()}. Example: \"{detail}\""
+            if complaints:
+                focus = complaints[0]
+                detail = negative[0] if negative else f"Issues with {focus.lower()}"
+                return f"The most common complaint is {focus.lower()}. Example: \"{detail}\""
+            # No single aspect crosses the complaint threshold, but negative
+            # points exist: cite one instead of inventing a complaint name.
+            return f"Customers report problems such as: \"{negative[0]}\""
 
         if any(w in lowered for w in ("like", "love", "best", "good", "praise", "positive", "strength")):
             if not positive:
