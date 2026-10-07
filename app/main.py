@@ -250,9 +250,10 @@ if analysis is not None:
     # Overall sentiment metrics
     st.markdown("**Overall Sentiment**")
     sentiment = analysis.overall_sentiment
-    metric_cols = st.columns(4)
+    metric_cols = st.columns(5)
     metric_cols[0].metric("Detected", sentiment.capitalize())
     # Sentiment distribution across aspects for a quick visual.
+    # All four sentiment classes are shown so the percentages sum to 100%.
     aspect_sentiments = [a.sentiment for a in analysis.aspects] or [sentiment]
     total = len(aspect_sentiments)
     metric_cols[1].metric(
@@ -263,6 +264,9 @@ if analysis is not None:
     )
     metric_cols[3].metric(
         "Negative aspects", f"{100 * aspect_sentiments.count('negative') / total:.0f}%"
+    )
+    metric_cols[4].metric(
+        "Mixed aspects", f"{100 * aspect_sentiments.count('mixed') / total:.0f}%"
     )
 
     st.divider()
