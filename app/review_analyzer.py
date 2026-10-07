@@ -66,10 +66,10 @@ class ReviewAnalyzer:
     """High-level facade: preprocess -> prompt -> LLM -> validate."""
 
     def __init__(self, config: dict | None = None, demo_mode: bool = False) -> None:
-        from app.nlp_processor import NlpProcessor  # local import avoids cycles
+        from app.nlp_processor import shared_processor  # local import avoids cycles
 
         self.config = config or load_config()
-        self.processor = NlpProcessor()
+        self.processor = shared_processor()
         self.demo_mode = demo_mode
         if demo_mode:
             from app.mock_llm import MockLLMClient

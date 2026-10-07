@@ -26,9 +26,13 @@ except ImportError:  # pragma: no cover
 _REVIEW_HEADER_RE = re.compile(r"^\s*review\s*\d+\s*[:.\-]\s*", re.IGNORECASE)
 
 
+_NLTK_DATA_READY = False
+
+
 def ensure_nltk_data() -> None:
     """Download the small NLTK models needed for tokenization/normalization."""
-    if not _NLTK_AVAILABLE:
+    global _NLTK_DATA_READY
+    if not _NLTK_AVAILABLE or _NLTK_DATA_READY:
         return
     packages = ["punkt", "punkt_tab", "stopwords", "wordnet", "omw-1.4"]
     for name in packages:
@@ -39,6 +43,7 @@ def ensure_nltk_data() -> None:
                 nltk.download(name, quiet=True)
             except Exception:
                 pass
+    _NLTK_DATA_READY = True
 
 
 def _nltk_path(package: str) -> str:
@@ -193,9 +198,20 @@ class NlpProcessor:
         return reviews, self.compute_statistics(reviews)
 
 
+_SHARED_PROCESSOR: "NlpProcessor | None" = None
+
+
+def shared_processor() -> "NlpProcessor":
+    """Process-wide NlpProcessor so NLTK setup happens only once."""
+    global _SHARED_PROCESSOR
+    if _SHARED_PROCESSOR is None:
+        _SHARED_PROCESSOR = NlpProcessor()
+    return _SHARED_PROCESSOR
+
+
 def top_keywords(reviews: list[str], top_n: int = 10) -> list[tuple[str, int]]:
     """Most frequent normalized keywords across all reviews."""
-    processor = NlpProcessor()
+    processor = shared_processor()
     counts: dict[str, int] = {}
     for review in reviews:
         tokens = processor.normalize_tokens(processor.tokenize(review))
