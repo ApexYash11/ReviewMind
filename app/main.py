@@ -35,13 +35,21 @@ def _api_key_configured() -> bool:
 
 DEMO_MODE = not _api_key_configured()
 
+DEFAULT_REVIEWS_TEXT = (
+    "Review 1: I love the camera on this phone, photos are sharp and detailed.\n"
+    "Review 2: Battery life is disappointing, I have to charge it twice a day.\n"
+    "Review 3: The display is excellent, very bright and colorful."
+)
+
 # ----------------------------------------------------------------------
 # Session state
 # ----------------------------------------------------------------------
 if "analysis" not in st.session_state:
     st.session_state.analysis = None
 if "reviews_text" not in st.session_state:
-    st.session_state.reviews_text = ""
+    st.session_state.reviews_text = DEFAULT_REVIEWS_TEXT
+if "raw_reviews" not in st.session_state:
+    st.session_state.raw_reviews = ""
 if "stats" not in st.session_state:
     st.session_state.stats = []
 if "keywords" not in st.session_state:
@@ -210,14 +218,9 @@ if upload is not None:
         st.session_state.reviews_text = content
         st.info(f"Loaded {upload.name} ({len(content)} characters).")
 
-default_text = (
-    "Review 1: I love the camera on this phone, photos are sharp and detailed.\n"
-    "Review 2: Battery life is disappointing, I have to charge it twice a day.\n"
-    "Review 3: The display is excellent, very bright and colorful."
-)
 st.session_state.reviews_text = st.text_area(
     "Paste customer reviews here (one or more, optionally prefixed with 'Review N:')",
-    value=st.session_state.reviews_text or default_text,
+    value=st.session_state.reviews_text,
     height=180,
 )
 
@@ -228,6 +231,9 @@ with col_clear:
     if st.button("Clear"):
         st.session_state.reviews_text = ""
         st.session_state.analysis = None
+        st.session_state.raw_reviews = ""
+        st.session_state.stats = []
+        st.session_state.keywords = []
         st.rerun()
 
 if analyze_clicked:
