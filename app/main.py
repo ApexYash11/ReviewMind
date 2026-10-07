@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
-from app.llm_client import LLMConfigError, LLMError, load_config
+from app.llm_client import LLMError, load_config
 from app.review_analyzer import ReviewAnalyzer
 from app.models import ValidationError
 
@@ -308,7 +308,7 @@ if analysis is not None:
     # Complaints, summary and NLP statistics
     st.markdown("**Common Complaints**")
     if analysis.common_complaints:
-        st.error(", ".join(analysis.common_complaints))
+        st.warning(", ".join(analysis.common_complaints))
     else:
         st.info("No recurring complaints found.")
 
