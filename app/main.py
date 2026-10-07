@@ -256,18 +256,16 @@ if analysis is not None:
     # All four sentiment classes are shown so the percentages sum to 100%.
     aspect_sentiments = [a.sentiment for a in analysis.aspects] or [sentiment]
     total = len(aspect_sentiments)
-    metric_cols[1].metric(
-        "Positive aspects", f"{100 * aspect_sentiments.count('positive') / total:.0f}%"
-    )
-    metric_cols[2].metric(
-        "Neutral aspects", f"{100 * aspect_sentiments.count('neutral') / total:.0f}%"
-    )
-    metric_cols[3].metric(
-        "Negative aspects", f"{100 * aspect_sentiments.count('negative') / total:.0f}%"
-    )
-    metric_cols[4].metric(
-        "Mixed aspects", f"{100 * aspect_sentiments.count('mixed') / total:.0f}%"
-    )
+    # Round all but the last bucket; the last takes the remainder so the
+    # displayed percentages always sum to exactly 100%.
+    pct_positive = round(100 * aspect_sentiments.count("positive") / total)
+    pct_neutral = round(100 * aspect_sentiments.count("neutral") / total)
+    pct_negative = round(100 * aspect_sentiments.count("negative") / total)
+    pct_mixed = 100 - pct_positive - pct_neutral - pct_negative
+    metric_cols[1].metric("Positive aspects", f"{pct_positive}%")
+    metric_cols[2].metric("Neutral aspects", f"{pct_neutral}%")
+    metric_cols[3].metric("Negative aspects", f"{pct_negative}%")
+    metric_cols[4].metric("Mixed aspects", f"{pct_mixed}%")
 
     st.divider()
 
