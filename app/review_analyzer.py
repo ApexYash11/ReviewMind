@@ -110,8 +110,25 @@ class ReviewAnalyzer:
     # ------------------------------------------------------------------
     def answer_question(self, reviews_text: str, question: str) -> str:
         """Answer a question strictly from the supplied reviews."""
+        if not reviews_text or not reviews_text.strip():
+            raise ValidationError("No reviews found. Please paste or upload some reviews.")
+        if not question or not question.strip():
+            raise ValidationError("Please type a question first.")
+        # Normalize through the NLP splitter and number the reviews, exactly
+        # like analyze_reviews does. The mock LLM (demo mode) extracts
+        # "Review N:" lines, so passing raw unnumbered text would collapse
+        # everything into one review and poison its answers.
+        reviews = self.processor.split_reviews(reviews_text)
+        if not reviews:
+            raise ValidationError("No reviews found. Please paste or upload some reviews.")
+        joined = "\n\n".join(f"Review {i}: {review}" for i, review in enumerate(reviews, 1))
+        max_chars = self.config.get("app", {}).get("max_input_chars", 20000)
+        if len(joined) > max_chars:
+            raise ValidationError(
+                f"Input too large ({len(joined)} characters). Limit is {max_chars}."
+            )
         prompt = (
-            self._qa_template.replace("{reviews}", reviews_text.strip())
+            self._qa_template.replace("{reviews}", joined)
             .replace("{question}", question.strip())
         )
         answer = self.client.chat(
