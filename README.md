@@ -142,7 +142,7 @@ reviewmind/
 │   ├── test_mock_llm.py   # Demo-mode client tests
 │   ├── test_uploads.py    # File-upload parsing tests (txt/csv/pdf/docx/xlsx)
 │   └── e2e_live.py        # Live-model end-to-end checks (not run by pytest)
-├── data/sample_reviews/   # 61-review sample corpus
+├── data/sample_reviews/   # Sample corpora (.txt + .pdf)
 ├── .env.example
 └── requirements.txt
 ```

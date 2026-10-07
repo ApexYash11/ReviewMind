@@ -43,7 +43,7 @@ Every row has an exact expected result — anything else is a bug.
 | 1 | Open the app | Title REVIEWMIND, prefilled example reviews, uploader, Analyze + Clear buttons, no dashboard, no Q&A section |
 | 2 | Clear the text, click **Analyze Reviews** | Error: "Please paste or upload at least one review" — no spinner, no crash |
 | 3 | Paste 25,000+ characters, click **Analyze** | Error: "Input too large … Limit is 20000" |
-| 4 | Upload `data/sample_reviews/sample_reviews.txt` | "Loaded … (3516 characters)" info; text area fills |
+| 4 | Upload `data/sample_reviews/sample_reviews.txt` (or `.pdf`) | "Loaded …" info; text area fills |
 | 5 | Upload a `.csv` with a `review` column | Only that column's rows are used |
 | 6 | Upload a `.csv` without a review-like column | All fields joined, no crash |
 | 7 | Upload an empty `.csv`, an empty `.txt`, or a `.json` file | Clean error, no crash, previous state kept |
