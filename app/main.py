@@ -124,7 +124,7 @@ def aspect_chart(analysis) -> None:
         )
         .properties(height=280)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def donut_chart(analysis) -> None:
@@ -151,7 +151,7 @@ def donut_chart(analysis) -> None:
         )
         .properties(height=280)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
 
 def run_analysis() -> None:
@@ -321,7 +321,7 @@ if analysis is not None:
                     for s in st.session_state.stats
                 ]
             )
-            st.dataframe(stats_df, use_container_width=True, hide_index=True)
+            st.dataframe(stats_df, width="stretch", hide_index=True)
             if st.session_state.keywords:
                 kw = ", ".join(f"{word} ({count})" for word, count in st.session_state.keywords)
                 st.caption(f"Top keywords after normalization: {kw}")
