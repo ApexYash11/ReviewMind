@@ -192,7 +192,8 @@ def aspect_chart(analysis) -> None:
             color=alt.Color(
                 "Sentiment:N",
                 scale=alt.Scale(
-                    domain=list(SENTIMENT_COLORS), range=list(SENTIMENT_COLORS)
+                    domain=list(SENTIMENT_COLORS),
+                    range=list(SENTIMENT_COLORS.values()),
                 ),
                 legend=None,
             ),
@@ -219,7 +220,8 @@ def donut_chart(analysis) -> None:
             color=alt.Color(
                 "Sentiment:N",
                 scale=alt.Scale(
-                    domain=list(SENTIMENT_COLORS), range=list(SENTIMENT_COLORS)
+                    domain=list(SENTIMENT_COLORS),
+                    range=list(SENTIMENT_COLORS.values()),
                 ),
                 legend=alt.Legend(title=None, orient="bottom"),
             ),
