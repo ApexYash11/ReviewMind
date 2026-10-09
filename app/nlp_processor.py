@@ -8,6 +8,7 @@ before the LLM is called.
 
 import re
 import string
+import threading
 import unicodedata
 
 from app.models import ReviewStats
@@ -66,13 +67,42 @@ class NlpProcessor:
         if _NLTK_AVAILABLE:
             try:
                 self._stopwords = set(stopwords.words("english"))
-            except LookupError:
+            except (LookupError, OSError, AttributeError):
                 self._stopwords = set()
-            self._lemmatizer = WordNetLemmatizer()
+            try:
+                self._lemmatizer = WordNetLemmatizer()
+            except (LookupError, OSError, AttributeError):
+                self._lemmatizer = None
         else:
             self._stopwords = set()
             self._lemmatizer = None
         self._punct_table = str.maketrans("", "", string.punctuation)
+        self._warm_up()
+
+    def _warm_up(self) -> None:
+        """Force every lazy NLTK corpus loader to load exactly once.
+
+        NLTK resolves ``punkt``, ``punkt_tab``, ``stopwords`` and ``wordnet``
+        through ``LazyCorpusLoader``, which is not thread-safe: if two threads
+        trigger the first load at the same time one of them raises
+        ``AttributeError: 'WordNetCorpusReader' object has no attribute
+        '_LazyCorpusLoader__args'``. Streamlit runs each browser session in its
+        own thread, so this happens as soon as two tabs analyse at once.
+        Resolving the loaders here, while shared_processor() holds its lock,
+        makes every later call a plain read.
+        """
+        if not _NLTK_AVAILABLE:
+            return
+        try:
+            sent_tokenize("Warm up. Sentence two.")
+            word_tokenize("warm up tokens")
+        except (LookupError, OSError, AttributeError):
+            pass
+        if self._lemmatizer is not None:
+            try:
+                self._lemmatizer.lemmatize("batteries", pos="v")
+            except (LookupError, OSError, AttributeError):
+                pass
 
     # ------------------------------------------------------------------
     # Step 1: text cleaning
@@ -199,13 +229,21 @@ class NlpProcessor:
 
 
 _SHARED_PROCESSOR: "NlpProcessor | None" = None
+_SHARED_PROCESSOR_LOCK = threading.Lock()
 
 
 def shared_processor() -> "NlpProcessor":
-    """Process-wide NlpProcessor so NLTK setup happens only once."""
+    """Process-wide NlpProcessor so NLTK setup happens only once.
+
+    Guarded by a lock: Streamlit gives every browser session its own thread,
+    and two threads building the processor at the same time would race inside
+    NLTK's lazy corpus loaders.
+    """
     global _SHARED_PROCESSOR
     if _SHARED_PROCESSOR is None:
-        _SHARED_PROCESSOR = NlpProcessor()
+        with _SHARED_PROCESSOR_LOCK:
+            if _SHARED_PROCESSOR is None:
+                _SHARED_PROCESSOR = NlpProcessor()
     return _SHARED_PROCESSOR
 
 

@@ -6,7 +6,7 @@ llm:
   max_retries: 2
   temperature: 0.2
   max_tokens: 6000              # reasoning models need headroom above their thinking budget
-  max_reasoning_tokens: 0       # >0 caps reasoning (OpenRouter reasoning models)
+  max_reasoning_tokens: 2000     # >0 caps reasoning (OpenRouter reasoning models)
 
 app:
   title: ReviewMind
